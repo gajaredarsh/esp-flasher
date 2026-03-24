@@ -1,13 +1,29 @@
-\contentsline {section}{\numberline {1}Introduction}{1}{section.1}%
-\contentsline {section}{\numberline {2}Overview}{2}{section.2}%
-\contentsline {section}{\numberline {3}Hardware Connections}{2}{section.3}%
-\contentsline {subsection}{\numberline {3.1}Pin Wiring}{2}{subsection.3.1}%
-\contentsline {subsection}{\numberline {3.2}Voltage Divider}{2}{subsection.3.2}%
-\contentsline {subsection}{\numberline {3.3}Reset Capacitor}{2}{subsection.3.3}%
-\contentsline {section}{\numberline {4}ESP32 Firmware flashing using ArduinoDroid}{2}{section.4}%
-\contentsline {section}{\numberline {5}Arduino Project Setup}{3}{section.5}%
-\contentsline {subsection}{\numberline {5.1}Create Project}{3}{subsection.5.1}%
-\contentsline {subsection}{\numberline {5.2}PlatformIO Configuration}{3}{subsection.5.2}%
-\contentsline {section}{\numberline {6}Uploading Firmware Wirelessly}{3}{section.6}%
-\contentsline {section}{\numberline {7}Finding the ESP32 IP Address}{3}{section.7}%
-\contentsline {section}{\numberline {8}The Timing Issue}{3}{section.8}%
+\contentsline {section}{\numberline {1} Uploading Code to Arduino Using ESP32 Wirelessly}{1}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Introduction}{1}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}Overview}{1}{subsection.1.2}%
+\contentsline {subsection}{\numberline {1.3}Hardware Connections}{2}{subsection.1.3}%
+\contentsline {subsubsection}{\numberline {1.3.1}Pin Wiring}{2}{subsubsection.1.3.1}%
+\contentsline {subsubsection}{\numberline {1.3.2}Voltage Divider}{2}{subsubsection.1.3.2}%
+\contentsline {subsubsection}{\numberline {1.3.3}Reset Capacitor}{2}{subsubsection.1.3.3}%
+\contentsline {subsection}{\numberline {1.4}ESP32 Firmware Flashing Using ArduinoDroid}{2}{subsection.1.4}%
+\contentsline {subsection}{\numberline {1.5}Arduino Project Setup}{2}{subsection.1.5}%
+\contentsline {subsubsection}{\numberline {1.5.1}Create Project}{2}{subsubsection.1.5.1}%
+\contentsline {subsubsection}{\numberline {1.5.2}PlatformIO Configuration}{2}{subsubsection.1.5.2}%
+\contentsline {subsection}{\numberline {1.6}Uploading Firmware Wirelessly}{3}{subsection.1.6}%
+\contentsline {subsection}{\numberline {1.7}Finding the ESP32 IP Address}{3}{subsection.1.7}%
+\contentsline {subsection}{\numberline {1.8}The Timing Issue}{3}{subsection.1.8}%
+\contentsline {section}{\numberline {2}ESP32-to-ESP32 OTA Firmware Updates}{4}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Introduction}{4}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}System Architecture}{4}{subsection.2.2}%
+\contentsline {subsubsection}{\numberline {2.2.1}Network Topology}{4}{subsubsection.2.2.1}%
+\contentsline {subsubsection}{\numberline {2.2.2}Data Flow}{4}{subsubsection.2.2.2}%
+\contentsline {subsection}{\numberline {2.3}Initial Setup}{4}{subsection.2.3}%
+\contentsline {subsubsection}{\numberline {2.3.1}Flash ESP32 \#2 (Receiver) via USB}{4}{subsubsection.2.3.1}%
+\contentsline {subsubsection}{\numberline {2.3.2}Flash ESP32 \#1 (Sender) via USB}{4}{subsubsection.2.3.2}%
+\contentsline {subsubsection}{\numberline {2.3.3}Verify Both Boards}{5}{subsubsection.2.3.3}%
+\contentsline {subsection}{\numberline {2.4}Repeatable Update Workflow}{5}{subsection.2.4}%
+\contentsline {subsubsection}{\numberline {2.4.1}Step 1 --- Compile Firmware Binary}{5}{subsubsection.2.4.1}%
+\contentsline {subsubsection}{\numberline {2.4.2}Step 2 --- Upload Binary to ESP32 \#1}{5}{subsubsection.2.4.2}%
+\contentsline {subsubsection}{\numberline {2.4.3}Step 3 --- Trigger OTA Push}{5}{subsubsection.2.4.3}%
+\contentsline {subsubsection}{\numberline {2.4.4}Step 4 --- Verify}{5}{subsubsection.2.4.4}%
+\contentsline {subsection}{\numberline {2.5}Golden Rule}{5}{subsection.2.5}%

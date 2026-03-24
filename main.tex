@@ -1,6 +1,7 @@
-\documentclass[10pt, a4paper]{article}
+\documentclass[11pt, a4paper]{article}
 
-\usepackage[a4paper, margin=2.5cm]{geometry}
+\usepackage[a4paper, top=1.1in, bottom=1in, left=1in, right=1in]{geometry}
+
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{hyperref}
@@ -18,223 +19,370 @@
 \usetikzlibrary{positioning}
 \usepackage{mdframed}
 
-% Colors
-\definecolor{codebg}{HTML}{F5F5F5}
-\definecolor{codeframe}{HTML}{CCCCCC}
-\definecolor{codegreen}{HTML}{008000}
-\definecolor{codegray}{HTML}{555555}
-\definecolor{codeblue}{HTML}{0000FF}
-\definecolor{codered}{HTML}{A31515}
-\definecolor{linkblue}{HTML}{0563C1}
-\definecolor{notebg}{HTML}{EFF6FF}
-\definecolor{noteframe}{HTML}{3B82F6}
-\definecolor{warnbg}{HTML}{FFFBEB}
-\definecolor{warnframe}{HTML}{F59E0B}
 
-% Hyperref
+
+% ── Hyperlinks: black ────────────────────────────────────────────────────────
 \hypersetup{
-    pdftitle   = {Uploading Code to Arduino Using ESP-32 Wirelessly},
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=black,
+    citecolor=black
 }
 
-% Code style
-\lstdefinestyle{codestyle}{
-    backgroundcolor = \color{codebg},
-    basicstyle      = \ttfamily\small,
-    keywordstyle    = \color{codeblue}\bfseries,
-    commentstyle    = \color{codegreen}\itshape,
-    stringstyle     = \color{codered},
-    breaklines      = true,
-    keepspaces      = true,
-    showstringspaces= false,
-    frame           = single,
-    framerule       = 0.4pt,
-    rulecolor       = \color{codeframe},
-    xleftmargin     = 6pt,
-    xrightmargin    = 6pt,
-    aboveskip       = 6pt,
-    belowskip       = 6pt,
-    tabsize         = 2,
+% ── Code listing style (matches screenshot: light grey bg, monospace, caption) 
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color[gray]{0.95},
+  frame=single,
+  framerule=0.4pt,
+  rulecolor=\color[gray]{0.6},
+  breaklines=true,
+  breakatwhitespace=false,
+  captionpos=t,
+  abovecaptionskip=4pt,
+  belowcaptionskip=2pt,
+  aboveskip=8pt,
+  belowskip=6pt,
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  commentstyle=\itshape\color[gray]{0.4},
+  keywordstyle=\bfseries,
+  showstringspaces=false,
+  columns=flexible,
+  keepspaces=true,
 }
-\lstset{style=codestyle}
+\renewcommand{\lstlistingname}{Listing}
 
-% Section styles
-\titleformat{\section}{\large\bfseries}{\thesection.}{0.5em}{}
-\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.5em}{}
-\titleformat{\subsubsection}{\normalsize\itshape}{}{}{}
-
-% Header/Footer
+% ── Header / footer — on ALL pages including first ───────────────────────────
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[L]{\small Uploading Code to Arduino Using ESP-32 Wirelessly}
-\fancyhead[R]{\small Scientific Programming}
-\fancyfoot[C]{\thepage}
 \renewcommand{\headrulewidth}{0.4pt}
-
-% Note boxes
+\fancyhead[L]{\small ESP-Flasher}
+\fancyhead[R]{\small Scientific Programming}
+\fancyfoot[C]{\small\thepage}
 \newmdenv[
-    backgroundcolor=notebg, linecolor=noteframe, linewidth=1.5pt,
+    linewidth=1.5pt,
     leftline=true, rightline=false, topline=false, bottomline=false,
     innerleftmargin=10pt, innerrightmargin=8pt,
     innertopmargin=6pt, innerbottommargin=6pt,
     skipabove=6pt, skipbelow=6pt,
 ]{notebox}
+% Override plain so page 1 also gets the header
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \renewcommand{\headrulewidth}{0.4pt}%
+  \fancyhead[L]{\small ESP-Flasher}%
+  \fancyhead[R]{\small Scientific Programming}%
+  \fancyfoot[C]{\small\thepage}%
+}
 
-\newmdenv[
-    backgroundcolor=warnbg, linecolor=warnframe, linewidth=1.5pt,
-    leftline=true, rightline=false, topline=false, bottomline=false,
-    innerleftmargin=10pt, innerrightmargin=8pt,
-    innertopmargin=6pt, innerbottommargin=6pt,
-    skipabove=6pt, skipbelow=6pt,
-]{warnbox}
+\setlist[enumerate]{itemsep=3pt, parsep=0pt, topsep=4pt}
+\setlist[itemize]{itemsep=2pt, parsep=0pt, topsep=4pt}
+\setcounter{tocdepth}{2}
 
-\newcommand{\ic}[1]{\texttt{\small #1}}
-
+% ─────────────────────────────────────────────────────────────────────────────
 \begin{document}
 
-% Title
-\title{\textbf{Uploading Code to Arduino Using ESP-32 Wirelessly}}
-\author{Darsh Gajare - EE25BTECH11020 \\ Nishid Khandagre - EE25BTECH11043}
-{\let\newpage\relax\maketitle}
-\tableofcontents
-
-% I. Introduction
-\section{Introduction}
-
-Uploading code to an Arduino through a phone can be done using applications
-like ArduinoDroid; however uploading solely through Termux is different because
-Termux does not have permission to directly access the USB port on Android devices.
-
-This document describes a hardware workaround: an ESP32 acts as a
-transparent bridge between WiFi and UART, forwarding the STK500 programming
-protocol from the phone to the Arduino bootloader wirelessly.
-
-\section{Overview}
-
+% ── Title ────────────────────────────────────────────────────────────────────
 \begin{center}
-\begin{tikzpicture}[
-    box/.style={draw, rectangle, minimum width=7cm, minimum height=1cm,
-                align=center, font=\small},
-    node distance=1.6cm
-]
-    \node[box] (phone)
-        {\textbf{Phone (Termux + Debian)}\\
-         \small PlatformIO (compile) \quad avrdude (upload)};
-
-    \node[box, below=of phone] (esp)
-        {\textbf{ESP32 NodeMCU}\\
-         \small WiFiServer (TCP:328) \quad UART2 relay};
-
-    \node[box, below=of esp] (uno)
-        {\textbf{Arduino UNO (ATmega328P)}\\
-         \small Optiboot Bootloader @ 115200 baud};
-
-    \draw[->] (phone.south) -- node[right, font=\small, xshift=4pt]
-        {WiFi / TCP Port 328 \quad STK500 Protocol} (esp.north);
-    \draw[->] (esp.south) -- node[right, font=\small, xshift=4pt]
-        {UART @ 115200 baud \quad P17$\to$RX, P16$\leftarrow$TX} (uno.north);
-\end{tikzpicture}
+  {\LARGE\bfseries ESP-Flasher}\\[10pt]
+  {\normalsize Darsh Gajare -- EE25BTECH11020
+               \quad Nishid Khandagre -- EE25BTECH11043}\\[6pt]
+  {\normalsize March 23, 2026}
 \end{center}
 
-The phone compiles the sketch using PlatformIO and invokes \ic{avrdude}, which
-opens a TCP socket to the ESP32 on port 328. The ESP32 forwards all bytes
+% ── Contents ─────────────────────────────────────────────────────────────────
+\tableofcontents
+\vspace{4pt}
+\noindent\rule{\linewidth}{0.4pt}
+
+% =============================================================================
+\section{ Uploading Code to Arduino Using ESP32 Wirelessly}
+
+\subsection{Introduction}
+
+Uploading code to an Arduino through a phone can be done using applications like
+ArduinoDroid; however uploading solely through Termux is different because Termux
+does not have permission to directly access the USB port on Android devices.
+
+This document describes a hardware workaround: an ESP32 acts as a transparent
+bridge between WiFi and UART, forwarding the STK500 programming protocol from
+the phone to the Arduino bootloader wirelessly.
+
+\subsection{Overview}
+
+The phone compiles the sketch using PlatformIO and invokes \texttt{avrdude},
+which opens a TCP socket to the ESP32 on port 328. The ESP32 forwards all bytes
 transparently between the socket and UART2, relaying the STK500 protocol to the
 Arduino bootloader.
 
-\section{Hardware Connections}
-
-\subsection{Pin Wiring}
-
 \begin{center}
-\begin{tabular}{llll}
+\begin{tabular}{@{} l l @{}}
 \toprule
-\textbf{ESP32 Pin} & \textbf{Arduino Pin} & \textbf{Dir.} & \textbf{Note} \\
+\textbf{Component} & \textbf{Role} \\
 \midrule
-5V        & VIN        & $\to$             & Power via onboard regulator \\
-GND       & GND        & $\leftrightarrow$ & Common ground --- essential \\
-P17 (TX2) & Pin 0 (RX) & $\to$             & Direct wire \\
-P16 (RX2) & Pin 1 (TX) & $\leftarrow$      & Via 3$\times$10k$\Omega$ voltage divider \\
-P4        & RST        & $\to$             & Reset control \\
+Phone (Termux + Debian)  & Compile via PlatformIO; upload via \texttt{avrdude} \\
+ESP32 NodeMCU            & WiFiServer TCP:328; UART2 relay at 115200\,baud \\
+Arduino UNO (ATmega328P) & Optiboot bootloader at 115200\,baud \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\subsection{Voltage Divider}
+\subsection{Hardware Connections}
 
-Arduino TX outputs 5V logic. The ESP32 GPIO pins supports 3.3V.
+\subsubsection{Pin Wiring}
+
+\begin{center}
+\begin{tabular}{@{} l l c l @{}}
+\toprule
+\textbf{ESP32 Pin} & \textbf{Arduino Pin} & \textbf{Dir.} & \textbf{Note} \\
+\midrule
+5V         & VIN        & $\rightarrow$     & Power via onboard regulator \\
+GND        & GND        & $\leftrightarrow$ & Common ground --- essential \\
+P17 (TX2)  & Pin 0 (RX) & $\rightarrow$     & Direct wire \\
+P16 (RX2)  & Pin 1 (TX) & $\leftarrow$      & Via 3$\times$10\,k$\Omega$ voltage divider \\
+P4         & RST        & $\rightarrow$     & Reset control \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{Voltage Divider}
+
+Arduino TX outputs 5\,V logic; ESP32 GPIO pins support 3.3\,V.
 A resistor voltage divider on the P16 (RX2) line is required:
 
 \[
-V_{out} = V_{in} \times \frac{R_2}{R_1 + R_2}
-        = 5\,\text{V} \times \frac{10\,\text{k}}{30\,\text{k}}
-        = 3.3\,\text{V}
+  V_{\text{out}} = V_{\text{in}} \times \frac{R_2}{R_1 + R_2}
+  = 5\,\text{V} \times \frac{10\,\text{k}}{30\,\text{k}} = 3.3\,\text{V}
 \]
 
-\subsection{Reset Capacitor}
+\subsubsection{Reset Capacitor}
+\label{sec:cap}
 
-A 100~$\mu$F electrolytic capacitor connected between Arduino RST (+) and
-GND ($-$) extends the bootloader window to 1--3~seconds, giving us time to press reset button on Arduino.
+A 100\,$\mu$F electrolytic capacitor connected between Arduino RST (+) and
+GND ($-$) extends the bootloader window to 1--3 seconds, giving time to press
+the reset button on the Arduino.
 
-\section{ESP32 Firmware flashing using ArduinoDroid}
+\subsection{ESP32 Firmware Flashing Using ArduinoDroid}
 
-The ESP32 firmware starts a TCP server on port 328 and relays bytes between
-the WiFi socket and UART2.Code for ESP32:
+The ESP32 firmware starts a TCP server on port 328 and relays bytes between the
+WiFi socket and UART2. Code:
 \begin{notebox}
-\href{https://github.com/gajaredarsh/esp-flasher/blob/main/esp_programmer/main.ino}{\ic{esp32\_programmer/main.ino}}.
+\href{https://github.com/your-repo/esp-flasher/blob/main/esp32_programmer/main.ino}%
+{\texttt{esp32\_programmer/main.ino}}.
 \end{notebox}
-Replace \ic{YOUR\_SSID} \& \ic{YOUR\_PASSWORD} with the SSID and Password of the network you are using.\\
-\begin{enumerate}[leftmargin=*, itemsep=2pt]
-    \item Install \textbf{ArduinoDroid} from the Play Store
-    \item Connect ESP32 to phone via OTG cable
-    \item Open ArduinoDroid $\to$ paste firmware $\to$ select \textbf{ESP32 Dev Module}
-    \item Tap \textbf{Upload} (hold BOOT on ESP32 if upload fails)
-    \item Use Serial Monitor at 115200~baud to read the IP address
+Replace \texttt{YOUR\_SSID} and \texttt{YOUR\_PASSWORD} with your network credentials.
+
+\begin{enumerate}
+  \item Install \textbf{ArduinoDroid} from the Play Store.
+  \item Connect the ESP32 to the phone via OTG cable.
+  \item Open ArduinoDroid $\rightarrow$ paste firmware $\rightarrow$
+        select \textit{ESP32 Dev Module}.
+  \item Tap \textbf{Upload} (hold BOOT on the ESP32 if upload fails).
+  \item Use Serial Monitor at 115200\,baud to read the IP address.
 \end{enumerate}
 
-% VI. Arduino Project
-\section{Arduino Project Setup}
+\subsection{Arduino Project Setup}
 
-\subsection{Create Project}
+\subsubsection{Create Project}
 
-\begin{lstlisting}[language=bash, caption={Initialize Arduino project}]
+\begin{lstlisting}[caption={Initialize Arduino project}]
 mkdir arduino_code && cd arduino_code
 pio init --board uno
-nvim src/main.cpp    # write your sketch
+nvim src/main.cpp  # write your sketch
 \end{lstlisting}
 
-\subsection{PlatformIO Configuration}
-Paste this code in platformio.ini
+\subsubsection{PlatformIO Configuration}
+
+Paste the contents of
 \begin{notebox}
-\href{https://github.com/gajaredarsh/esp-flasher/blob/main/arduino-code/platformio.ini}{\ic{arduino\_code/platformio.ini}}.
+\href{https://github.com/your-repo/esp-flasher/blob/main/arduino_code/platformio.ini}%
+{\texttt{arduino\_code/platformio.ini}}
 \end{notebox}
-Replace \ic{ESP\_IP} with your ESP32's IP address (e.g.\ \ic{192.168.43.100}).
+into your project's \texttt{platformio.ini}.
+Replace \texttt{ESP\_IP} with the ESP32's IP address (e.g.\ \texttt{192.168.43.100}).
 
-% VII. Uploading
-\section{Uploading Firmware Wirelessly}
+The configuration uses \texttt{upload\_protocol = custom} with \texttt{avrdude}
+connecting over \texttt{socket://ESP\_IP:328} at 115200\,baud, targeting
+\texttt{atmega328p} with the \texttt{stk500v1} programmer.
 
-\begin{lstlisting}[language=bash, caption={Build and upload}]
+\subsection{Uploading Firmware Wirelessly}
+
+\begin{lstlisting}[caption={Build and upload}]
 cd arduino_code
 pio run --target upload
 \end{lstlisting}
 
-Press RST on the Arduino immediately after running the command.
+Press \textbf{RST} on the Arduino immediately after running the command.
 
-% VIII. Finding IP
-\section{Finding the ESP32 IP Address}
+\subsection{Finding the ESP32 IP Address}
 
-The ESP32 IP address changes when switching networks. Method to find it: \\
-\textbf{ArduinoDroid Serial Monitor} --- connect via OTG, open Serial
-          Monitor at 115200~baud, press RST on ESP32
+The ESP32 IP address changes when switching networks.
 
+\textbf{ArduinoDroid Serial Monitor} --- connect via OTG, open Serial Monitor
+at 115200\,baud, press RST on ESP32.
 
-% IX. Timing Issue
-\section{The Timing Issue}
+\subsection{The Timing Issue}
 
 Uploading relies on the Arduino auto-reset mechanism. When a serial connection
 opens, the DTR line drops, pulsing the RESET pin and forcing the Arduino into
-bootloader mode. The bootloader listens for only $\approx$1~second before timing out.
+bootloader mode. The bootloader listens for only $\approx$1 second before
+timing out.
 
-Over TCP, avrdude cannot control DTR automatically. The 100~$\mu$F capacitor
-(Section~3.3) solves this by extending the window to 1--3~seconds.
+Over TCP, \texttt{avrdude} cannot control DTR automatically. The
+100\,$\mu$F capacitor (Section~\ref{sec:cap}) solves this by extending the
+window to 1--3 seconds.
 
+\newpage
+% =============================================================================
+\section{ESP32-to-ESP32 OTA Firmware Updates}
+
+\subsection{Introduction}
+
+This chapter extends the wireless programming concept to ESP32-to-ESP32
+over-the-air (OTA) firmware updates. Instead of a WiFi-to-UART bridge, ESP32\,\#1
+acts as a WiFi Access Point and HTTP OTA controller. ESP32\,\#2 connects to it
+and updates its own firmware wirelessly --- no USB required after initial setup.
+
+\textbf{Method:} HTTP OTA over raw TCP is used instead of Arduino OTA. Arduino OTA
+relies on mDNS discovery and has no built-in integrity verification, making it
+unreliable for ESP-to-ESP flashing. HTTP OTA uses direct IP addressing with MD5
+checksum verification.
+
+\subsection{System Architecture}
+
+\subsubsection{Network Topology}
+
+\begin{center}
+\begin{tabular}{@{} l l l l @{}}
+\toprule
+\textbf{Device} & \textbf{Role} & \textbf{IP} & \textbf{Port} \\
+\midrule
+ESP32 \#1 & Sender / Access Point & 192.168.4.1 & 80 \\
+ESP32 \#2 & Receiver / OTA Target & 192.168.4.2 & 8080 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{Data Flow}
+
+\begin{enumerate}
+  \item Phone POSTs \texttt{firmware.bin} to ESP32\,\#1 at \texttt{/upload}.
+  \item ESP32\,\#1 saves binary to LittleFS and computes MD5.
+  \item Phone GETs \texttt{/trigger} on ESP32\,\#1.
+  \item ESP32\,\#1 opens raw TCP connection to \texttt{192.168.4.2:8080}.
+  \item ESP32\,\#1 sends HTTP POST with binary body and \texttt{x-md5} header.
+  \item ESP32\,\#2 streams bytes into Update library, verifies MD5.
+  \item ESP32\,\#2 replies HTTP 200 OK.
+  \item ESP32\,\#2 calls \texttt{Update.end(true)} $\rightarrow$ sets boot
+        partition $\rightarrow$ \texttt{ESP.restart()}.
+\end{enumerate}
+
+\subsection{Initial Setup}
+
+\subsubsection{Flash ESP32 \#2 (Receiver) via USB}
+
+Compile the following code using Platformio
+\begin{notebox}
+\href{https://github.com/your-repo/esp-flasher/blob/main/esp32_receiver/esp32_receiver_final.ino}%
+{\texttt{esp32\_receiver/src/main.cpp}}
+\end{notebox}
+Using ArduinoDroid flash via USB. This is the \textbf{only time USB is needed}
+for ESP32\,\#2. On boot it connects to ESP32-OTA-Net and starts the OTA server
+on port 8080.
+
+\subsubsection{Flash ESP32 \#1 (Sender) via USB}
+
+Compile the following using Platformio
+\begin{notebox}
+\href{https://github.com/your-repo/esp-flasher/blob/main/esp32_sender/esp32_sender_stable.ino}%
+{\texttt{esp32\_sender/src/main.cpp}}
+\end{notebox}
+Using ArduinoDroid flash via USB. ESP32\,\#1 boots as WiFi AP with SSID \textbf{ESP32-OTA-Net},
+password \texttt{12345678}, IP \texttt{192.168.4.1}.
+
+\subsubsection{Verify Both Boards}
+
+Connect your phone to \textbf{ESP32-OTA-Net}, then:
+
+\begin{lstlisting}[caption={Verify both boards}]
+curl http://192.168.4.1/status       # ESP32 #1
+curl http://192.168.4.2:8080/status  # ESP32 #2
+\end{lstlisting}
+
+Both should respond with \texttt{\{"status":"ready",...\}}.
+
+\subsection{Repeatable Update Workflow}
+
+\subsubsection{Step 1 --- Compile Firmware Binary}
+
+\begin{lstlisting}[caption={Compile with PlatformIO}]
+pio run
+# binary at: .pio/build/esp2/firmware.bin
+\end{lstlisting}
+
+\subsubsection{Step 2 --- Upload Binary to ESP32 \#1}
+
+\begin{lstlisting}[caption={Upload binary to ESP32 \#1}]
+# PlatformIO binary
+curl -F "firmware=@.pio/build/esp2/firmware.bin" http://192.168.4.1/upload
+
+# Verify it landed
+curl http://192.168.4.1/status    # firmware_loaded: true
+\end{lstlisting}
+
+\subsubsection{Step 3 --- Trigger OTA Push}
+
+\begin{lstlisting}[caption={Trigger OTA push}]
+curl http://192.168.4.1/trigger
+\end{lstlisting}
+
+ESP32\,\#1 connects to \texttt{192.168.4.2:8080}, sends the binary with the MD5
+header, and reports success. ESP32\,\#2 verifies, writes, and reboots.
+
+\subsubsection{Step 4 --- Verify}
+
+Wait $\approx$5 seconds for ESP32\,\#2 to reboot, then:
+
+\begin{lstlisting}[caption={Verify ESP32 \#2 is back online}]
+curl http://192.168.4.2:8080/status
+\end{lstlisting}
+
+
+\subsection{Golden Rule}
+
+Every sketch deployed to ESP32\,\#2 must include \texttt{handleOTAClient()} and
+\texttt{otaServer.available()} in \texttt{loop()}. If you flash a plain sketch
+without it, ESP32\,\#2 loses wireless update capability and requires USB to
+recover. See the
+\href{https://github.com/your-repo/esp-flasher/blob/main/esp32_receiver/esp32_receiver_final.ino}%
+{receiver template} for the minimum required structure.
+
+\begin{lstlisting}[caption={Minimum required structure for every ESP32 \#2 firmware}]
+#include <WiFi.h>
+#include <Update.h>
+
+WiFiServer otaServer(8080);
+// paste handleOTAClient() from esp32_receiver_final.ino
+
+void setup() {
+  connectWiFi();    // connect to ESP32-OTA-Net
+  otaServer.begin(); // always start OTA server
+  // your app setup ...
+}
+
+void loop() {
+  WiFiClient c = otaServer.available();
+  if (c) handleOTAClient(c); // always poll for OTA
+  // your app code below ...
+}
+\end{lstlisting}
+
+\vspace{14pt}
+\noindent\rule{\linewidth}{0.4pt}
+\begin{center}
+  \small Repository:
+  \href{https://github.com/your-repo/esp-flasher}{github.com/your-repo/esp-flasher}
+\end{center}
 
 \end{document}
