@@ -3,7 +3,7 @@
 \usepackage{gvv}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
-%\usepackage{listings}
+\usepackage{listings}
 \usepackage{xcolor}
 %\usepackage{amsmath}
 \usepackage{graphicx}
@@ -18,148 +18,211 @@
   keywordstyle=\color{blue}\bfseries,
   commentstyle=\color{green!40!black},
   stringstyle=\color{red},
-%  numbers=left,                     % keep numbers
-%  numberstyle=\scriptsize\ttfamily, % more readable numbers
-%  numbersep=8pt,                    % add spacing from code
-  xleftmargin=1.5em,                % indent code so numbers don't overlap
+  xleftmargin=1.5em,
   frame=single,
   breaklines=true,
   breakatwhitespace=true,
   tabsize=2,
   showstringspaces=false,
   captionpos=b,
-  keepspaces=true,                  % preserve spacing properly
-  linewidth=\columnwidth,           % constrain to column width
-  columns=fullflexible              % prevent box overflow
+  keepspaces=true
 }
 \def\UrlBreaks{\do\/\do-\do\_\do\.}
-\title{ESP-Flasher}
+
+\title{ESP-Flasher: Wireless Arduino and ESP32 Firmware Deployment from a Android Environment}
+
 \author{
-	\IEEEauthorblockN{Darsh Gajare-EE25BTECH11020 and Nishid Khandagre -EE25BTECH11043}
+\IEEEauthorblockN{Darsh Gajare and Nishid Khandagre}
+\IEEEauthorblockA{
+Department of Electrical Engineering\\
+IIT Hyderabad\\
+Email: EE25BTECH11020@iith.ac.in, EE25BTECH11043@iith.ac.in}
 }
+
 \begin{document}
+
 \maketitle
 
-\tableofcontents
+\begin{abstract}
+Uploading firmware to microcontrollers from Android devices running Termux is
+non-trivial because Android denies user-space processes direct USB access.
+This paper presents ESP-Flasher, a two-tier wireless firmware deployment
+system that eliminates the need for USB access during development.
+In the first tier, an ESP32 acts as a transparent WiFi-to-UART bridge, relaying
+the STK500v1 programming protocol from \texttt{avrdude} on the phone to the
+Optiboot bootloader of an Arduino UNO over TCP port~328.
+In the second tier, the same ESP32 doubles as a WiFi access-point and
+HTTP firmware store, pushing verified binary images to a second ESP32 target
+via raw TCP with MD5 integrity checking, bypassing the mDNS limitations of
+Arduino OTA.
+Together the two tiers form a fully wireless, USB-free firmware update chain
+that is reproducible entirely from a command-line Termux environment.
+\end{abstract}
 
-% ─────────────────────────────────────────────────────────────
+\begin{IEEEkeywords}
+ESP32, Arduino, Over-The-Air Update, WiFi-UART Bridge, STK500, PlatformIO,
+Termux, Wireless Programming, Embedded Systems, LittleFS.
+\end{IEEEkeywords}
+
+%---------------------------------------------------------------------
+\section{Introduction}
+%---------------------------------------------------------------------
+
+Wireless firmware deployment has attracted sustained interest across
+embedded-systems research and practice.
+The \textit{esp-link} project~\cite{esplink} demonstrated that an ESP8266
+can host an integrated STK500v1 programmer together with a tiny HTTP server,
+enabling AVR reprogramming over WiFi from any browser.
+Lima and collaborators extended this concept to the three hardware UARTs of
+the ESP32, providing a transparent TCP-to-serial bridge that forwards serial
+data between a WiFi socket and the attached microcontroller~\cite{esp32bridge}.
+On the OTA side, Espressif's official ESP-IDF provides a dual-partition update
+scheme in which a new firmware image is written to the inactive OTA partition,
+verified, and booted, guaranteeing that a failed update cannot brick the
+device~\cite{espressifota}.
+Joyce's \textit{esp32FOTA} library~\cite{esp32fota} further automates this
+pipeline by polling a JSON manifest on a remote server and applying
+semantic-version comparisons before initiating a download.
+Mischianti~\cite{mischianti} surveys HTTP-based self-update patterns for
+ESP32, highlighting the use of MD5 checksums as a lightweight integrity
+mechanism and the role of LittleFS for intermediate firmware storage.
+The ElegantOTA library~\cite{elegantota} packages the same HTTP update flow
+into a ready-made web-server interface, while Flashgamer~\cite{flashgamer}
+documents the low-level mechanics of chunked OTA streaming and partition
+toggling in the ESP-IDF framework.
+
+Despite this body of work, two practical gaps persist.
+First, none of the WiFi-to-UART bridging solutions address the specific
+constraint of a \emph{USB-restricted Android host}: prior art assumes a
+desktop or laptop as the compile-and-upload machine, where \texttt{avrdude}
+can open a COM port directly.
+On Android with Termux, no such access is available, so the socket-based
+upload path of \texttt{avrdude} (\texttt{-P socket://\textit{IP}:\textit{port}})
+must carry the entire STK500 exchange over TCP---a configuration not discussed
+in any of the references above.
+Second, existing ESP-to-ESP OTA workflows either rely on mDNS service
+discovery (which is unreliable on direct AP networks) or depend on external
+cloud infrastructure.
+Neither approach suits a fully air-gapped, access-point-local development
+environment.
+
+This paper makes two contributions that fill these gaps.
+First, it characterises and resolves the bootloader timing problem introduced
+by the DTR-less TCP connection: because \texttt{avrdude} cannot assert DTR
+over a socket, the Optiboot bootloader's one-second window expires before
+synchronisation is achieved.
+We show that inserting a 100\,\textmu F capacitor between Arduino RST and GND
+extends the reset window to 1--3\,s, making reliable STK500 programming over
+TCP feasible.
+Second, it presents a direct-IP HTTP OTA scheme in which one ESP32 acts as
+both access point and firmware server, pushing a stored binary to a second
+ESP32 over raw TCP with an \texttt{x-md5} header---requiring no cloud
+infrastructure, no mDNS, and no laptop.
+The complete system is operated entirely from a PlatformIO-based Termux
+workflow on an Android phone.
+
+%---------------------------------------------------------------------
 \section{Uploading Code to Arduino Using ESP32 Wirelessly}
-
-\subsection{Introduction}
-
-Uploading code to an Arduino through a phone can be
-done using applications like ArduinoDroid; however uploading
-solely through Termux is different because Termux does not
-have permission to directly access the USB port on Android
-devices.
-
-This document describes a hardware workaround: an ESP32
-acts as a transparent bridge between WiFi and UART, forwarding the STK500 programming protocol from the phone to the
-Arduino bootloader wirelessly.
+%---------------------------------------------------------------------
 
 \subsection{Overview}
 
-The phone compiles the sketch using PlatformIO and invokes avrdude, which opens a TCP socket to the ESP32 on
-port 328. The ESP32 forwards all bytes transparently between
-the socket and UART2, relaying the STK500 protocol to the
-Arduino bootloader.
+The phone compiles the sketch using PlatformIO and invokes \texttt{avrdude},
+which opens a TCP socket to the ESP32 on port~328.
+The ESP32 forwards all bytes transparently between the socket and UART2,
+relaying the STK500 protocol to the Arduino bootloader.
 
 \begin{table}[H]
 \centering
+\caption{System Components -- Chapter I}
 \resizebox{\columnwidth}{!}{%
 \begin{tabular}{ll}
 \toprule
-Component & Role \\
+\textbf{Component} & \textbf{Role} \\
 \midrule
-Phone (Termux + Debian)  & Compile via PlatformIO; upload via avrdude \\
-ESP32 NodeMCU            & WiFiServer TCP:328; UART2 relay at 115200 baud \\
-Arduino UNO (ATmega328P) & Optiboot bootloader at 115200 baud \\
+Phone (Termux + Debian) & Compile via PlatformIO; upload via \texttt{avrdude} \\
+ESP32 NodeMCU & WiFiServer TCP:328; UART2 relay at 115200\,baud \\
+Arduino UNO (ATmega328P) & Optiboot bootloader at 115200\,baud \\
 \bottomrule
-\end{tabular}%
-}
+\end{tabular}}
 \end{table}
 
 \subsection{Hardware Connections}
 
 \begin{table}[H]
 \centering
+\caption{ESP32--Arduino Pin Connections}
 \resizebox{\columnwidth}{!}{%
 \begin{tabular}{llll}
 \toprule
-ESP32 Pin  & Arduino Pin & Dir. & Note \\
+\textbf{ESP32 Pin} & \textbf{Arduino Pin} & \textbf{Dir.} & \textbf{Note} \\
 \midrule
-5V         & VIN         & $\rightarrow$     & Power via onboard regulator \\
-GND        & GND         & $\leftrightarrow$ & Common ground --- essential \\
-P17 (TX2)  & Pin 0 (RX)  & $\rightarrow$     & Direct wire \\
-P16 (RX2)  & Pin 1 (TX)  & $\leftarrow$      & Via 3$\times$10 k$\Omega$ voltage divider \\
-P4         & RST         & $\rightarrow$     & Reset control \\
+5V            & VIN         & $\rightarrow$     & Power via onboard regulator \\
+GND           & GND         & $\leftrightarrow$ & Common ground --- essential \\
+P17 (TX2)     & Pin 0 (RX)  & $\rightarrow$     & Direct wire \\
+P16 (RX2)     & Pin 1 (TX)  & $\leftarrow$      & Via 3$\times$10\,k$\Omega$ divider \\
+P4            & RST         & $\rightarrow$     & Reset control \\
 \bottomrule
-\end{tabular}%
-}
+\end{tabular}}
 \end{table}
 
 \subsubsection{Pin Wiring}
+The TX/RX lines are cross-connected between the ESP32 UART2 and the Arduino
+hardware serial pins.
 
 \subsubsection{Voltage Divider}
-
-Arduino TX outputs 5 V logic; ESP32
-GPIO pins support 3.3 V. A resistor voltage divider on the
-P16 (RX2) line is required:
-
-\begin{align}
-  V_{out} = V_{in} \times \frac{R_2}{R_1 + R_2}
-           = 5\,\text{V} \times \frac{10\,\text{k}}{30\,\text{k}}
-           = 3.3\,\text{V}
-\end{align}
+Arduino TX outputs 5\,V logic; ESP32 GPIO pins support 3.3\,V.
+A resistor voltage divider on the P16 (RX2) line is required:
+\begin{equation}
+V_{\text{out}} = V_{\text{in}} \times \frac{R_2}{R_1+R_2}
+              = 5\,\text{V} \times \frac{10\,\text{k}}{30\,\text{k}}
+              = 3.3\,\text{V}
+\end{equation}
 
 \subsubsection{Reset Capacitor}
-
-A 100\,$\mu$F electrolytic capacitor connected between Arduino RST (+) and GND ($-$) extends the
-bootloader window to 1--3 seconds, giving time to press the
-reset button on the Arduino.
+A 100\,\textmu F electrolytic capacitor connected between Arduino RST ($+$) and
+GND ($-$) extends the bootloader window to 1--3\,seconds, giving time to press
+the reset button on the Arduino.
 
 \subsection{ESP32 Firmware Flashing Using ArduinoDroid}
 
-The ESP32 firmware starts a TCP server on port 328 and
-relays bytes between the WiFi socket and UART2. Code:
-\begin{quote}
-\href{https://github.com/gajaredarsh/esp-flasher/tree/main/esp_programmer/src}{\texttt{esp32\_programmer/src/main.cpp}}.\end{quote}
-Replace \texttt{YOUR\_SSID} and \texttt{YOUR\_PASSWORD} with your network credentials.
+The ESP32 firmware starts a TCP server on port~328 and relays bytes between
+the WiFi socket and UART2.
+Code: \texttt{esp32\_programmer/src/main.cpp}.
+Replace \texttt{YOUR\_SSID} and \texttt{YOUR\_PASSWORD} with your network
+credentials.
 
 \begin{enumerate}
-  \item Compile using Platformio
-  \item Connect the ESP32 to the phone via OTG cable.
-  \item Open ArduinoDroid $\rightarrow$ paste firmware $\rightarrow$ select ESP32 Dev Module.
-  \item Tap Upload (hold BOOT on the ESP32 if upload fails).
-  \item Use Serial Monitor at 115200 baud to read the IP address.
+\item Compile using PlatformIO.
+\item Connect the ESP32 to the phone via OTG cable.
+\item Open ArduinoDroid $\rightarrow$ paste firmware $\rightarrow$ select
+      \textit{ESP32 Dev Module}.
+\item Tap Upload (hold BOOT on the ESP32 if upload fails).
+\item Use Serial Monitor at 115200 baud to read the IP address.
 \end{enumerate}
 
 \subsection{Arduino Project Setup}
 
 \subsubsection{Create Project}
-Use the commands
-\begin{lstlisting}[caption={Initialize Arduino project}]
+Use Commands
+\begin{lstlisting}[language=bash, caption={Initialize Arduino project}]
 mkdir arduino_code && cd arduino_code
 pio init --board uno
-nvim src/main.cpp # write your sketch
+nvim src/main.cpp  # write your sketch
 \end{lstlisting}
 
 \subsubsection{PlatformIO Configuration}
-
-Paste the contents of
-\begin{quote}
-\href{https://github.com/gajaredarsh/esp-flasher/blob/main/arduino-code/platformio.ini}{\texttt{arduino\_code/platformio.ini}}
-\end{quote}
-into your project's \texttt{platformio.ini}. Replace \texttt{ESP\_IP}
-with the ESP32's IP address (e.g.\ 192.168.43.100).
-
-The configuration uses \texttt{upload\_protocol = custom}
-with avrdude connecting over \texttt{socket://ESP\_IP:328} at
-115200 baud, targeting atmega328p with the stk500v1 programmer.
+Paste the contents of \texttt{arduino\_code/platformio.ini} into your
+project's \texttt{platformio.ini}.
+Replace \texttt{ESP\_IP} with the ESP32's IP address
+(e.g.\ \texttt{192.168.43.100}).
+The configuration uses \texttt{upload\_protocol = custom} with \texttt{avrdude}
+connecting over \texttt{socket://ESP\_IP:328} at 115200 baud, targeting
+\texttt{atmega328p} with the \texttt{stk500v1} programmer.
 
 \subsection{Uploading Firmware Wirelessly}
-
-\begin{lstlisting}[caption={Build and upload}]
+Use Commands
+\begin{lstlisting}[language=bash, caption={Build and upload}]
 cd arduino_code
 pio run --target upload
 \end{lstlisting}
@@ -169,97 +232,93 @@ Press RST on the Arduino immediately after running the command.
 \subsection{Finding the ESP32 IP Address}
 
 The ESP32 IP address changes when switching networks.
-
-ArduinoDroid Serial Monitor --- connect via OTG, open
-Serial Monitor at 115200 baud, press RST on ESP32.
+Connect via OTG and open the ArduinoDroid Serial Monitor at 115200 baud,
+then press RST on the ESP32 to read the assigned IP.
 
 \subsection{The Timing Issue}
 
 Uploading relies on the Arduino auto-reset mechanism.
-When a serial connection opens, the DTR line drops, pulsing
-the RESET pin and forcing the Arduino into bootloader mode.
-The bootloader listens for only $\approx$1 second before timing out.
+When a serial connection opens, the DTR line drops, pulsing the RESET pin and
+forcing the Arduino into bootloader mode.
+The bootloader listens for only $\approx$1\,second before timing out.
+Over TCP, \texttt{avrdude} cannot control DTR automatically.
+The 100\,\textmu F capacitor (Section~II-C3) solves this by extending the
+window to 1--3\,seconds.
 
-Over TCP, avrdude cannot control DTR automatically. The
-100\,$\mu$F capacitor (Section \ref{sec:resetcap}) solves this by extending the
-window to 1--3 seconds.
-
-% ─────────────────────────────────────────────────────────────
+%---------------------------------------------------------------------
 \section{ESP32-to-ESP32 OTA Firmware Updates}
+%---------------------------------------------------------------------
 
 \subsection{Introduction}
 
-This chapter extends the wireless programming concept to
-ESP32-to-ESP32 over-the-air (OTA) firmware updates. Instead
-of a WiFi-to-UART bridge, ESP32 \#1 acts as a WiFi Access Point
-and HTTP OTA controller. ESP32 \#2 connects to it and
-updates its own firmware wirelessly --- no USB required after
-initial setup.
+This chapter extends the wireless programming concept to ESP32-to-ESP32
+over-the-air (OTA) firmware updates.
+Instead of a WiFi-to-UART bridge, ESP32~\#1 acts as a WiFi Access Point and
+HTTP OTA controller.
+ESP32~\#2 connects to it and updates its own firmware wirelessly---no USB
+required after initial setup.
 
-Method: HTTP OTA over raw TCP is used instead of
-Arduino OTA. Arduino OTA relies on mDNS discovery and
-has no built-in integrity verification, making it unreliable for
-ESP-to-ESP flashing. HTTP OTA uses direct IP addressing
-with MD5 checksum verification.
+\textbf{Method:} HTTP OTA over raw TCP is used instead of Arduino OTA.
+Arduino OTA relies on mDNS discovery and has no built-in integrity
+verification, making it unreliable for ESP-to-ESP flashing.
+HTTP OTA uses direct IP addressing with MD5 checksum verification.
 
 \subsection{System Architecture}
 
 \begin{table}[H]
 \centering
+\caption{Device Roles and Addresses}
 \resizebox{\columnwidth}{!}{%
 \begin{tabular}{llll}
 \toprule
-Device     & Role                  & IP           & Port \\
+\textbf{Device} & \textbf{Role} & \textbf{IP} & \textbf{Port} \\
 \midrule
-ESP32 \#1  & Sender / Access Point & 192.168.4.1  & 80   \\
-ESP32 \#2  & Receiver / OTA Target & 192.168.4.2  & 8080 \\
+ESP32 \#1 & Sender / Access Point & 192.168.4.1 & 80 \\
+ESP32 \#2 & Receiver / OTA Target & 192.168.4.2 & 8080 \\
 \bottomrule
-\end{tabular}%
-}
+\end{tabular}}
 \end{table}
 
 \subsubsection{Network Topology}
+ESP32~\#1 operates as a WiFi access point with SSID
+\texttt{ESP32-OTA-Net} (password \texttt{12345678}).
+ESP32~\#2 connects to this network as a station.
 
 \subsubsection{Data Flow}
-
 \begin{enumerate}
-  \item Phone POSTs firmware.bin to ESP32 \#1 at \texttt{/upload}.
-  \item ESP32 \#1 saves binary to LittleFS and computes MD5.
-  \item Phone GETs \texttt{/trigger} on ESP32 \#1.
-  \item ESP32 \#1 opens raw TCP connection to 192.168.4.2:8080.
-  \item ESP32 \#1 sends HTTP POST with binary body and \texttt{x-md5} header.
-  \item ESP32 \#2 streams bytes into Update library, verifies MD5.
-  \item ESP32 \#2 replies HTTP 200 OK.
-  \item ESP32 \#2 calls \texttt{Update.end(true)} $\rightarrow$ sets boot partition $\rightarrow$ \texttt{ESP.restart()}.
+\item Phone POSTs \texttt{firmware.bin} to ESP32~\#1 at \texttt{/upload}.
+\item ESP32~\#1 saves binary to LittleFS and computes MD5.
+\item Phone GETs \texttt{/trigger} on ESP32~\#1.
+\item ESP32~\#1 opens raw TCP connection to \texttt{192.168.4.2:8080}.
+\item ESP32~\#1 sends HTTP POST with binary body and \texttt{x-md5} header.
+\item ESP32~\#2 streams bytes into the Update library, verifies MD5.
+\item ESP32~\#2 replies HTTP 200 OK.
+\item ESP32~\#2 calls \texttt{Update.end(true)} $\rightarrow$ sets boot
+      partition $\rightarrow$ \texttt{ESP.restart()}.
 \end{enumerate}
 
 \subsection{Initial Setup}
 
 \subsubsection{Flash ESP32 \#2 (Receiver) via USB}
-
-Compile the following code using Platformio
-\begin{quote}
-\href{https://github.com/gajaredarsh/esp-flasher/blob/main/esp_receiver/src/main.cpp}{\texttt{esp32\_receiver/src/main.cpp}}
-\end{quote}
-	Using ArduinoDroid flash via USB. This is the only time
-USB is needed for ESP32 \#2. On boot it connects to ESP32-OTA-Net and starts the OTA server on port 8080.
+Compile the following code using PlatformIO:
+\texttt{esp32\_receiver/src/main.cpp}.
+Using ArduinoDroid, flash via USB.
+This is the only time USB is needed for ESP32~\#2.
+On boot it connects to \texttt{ESP32-OTA-Net} and starts the OTA server on
+port~8080.
 
 \subsubsection{Flash ESP32 \#1 (Sender) via USB}
-
-Compile the following using Platformio
-\begin{quote}
-\href{https://github.com/gajaredarsh/esp-flasher/blob/main/esp_sender/src/main.cpp}{\texttt{esp32\_sender/src/main.cpp}}
-\end{quote}
-	Using ArduinoDroid flash via USB. ESP32 \#1 boots as
-WiFi AP with SSID ESP32-OTA-Net, password 12345678,
-IP 192.168.4.1.
+Compile the following using PlatformIO:
+\texttt{esp32\_sender/src/main.cpp}.
+Using ArduinoDroid, flash via USB.
+ESP32~\#1 boots as WiFi AP with SSID \texttt{ESP32-OTA-Net},
+password \texttt{12345678}, IP \texttt{192.168.4.1}.
 
 \subsubsection{Verify Both Boards}
+Connect your phone to \texttt{ESP32-OTA-Net}, then:
 
-Connect your phone to ESP32-OTA-Net, then:
-
-\begin{lstlisting}[caption={Verify both boards}]
-curl http://192.168.4.1/status # ESP32 #1
+\begin{lstlisting}[language=bash, caption={Verify both boards}]
+curl http://192.168.4.1/status      # ESP32 #1
 curl http://192.168.4.2:8080/status # ESP32 #2
 \end{lstlisting}
 
@@ -268,58 +327,56 @@ Both should respond with \texttt{\{"status":"ready",...\}}.
 \subsection{Repeatable Update Workflow}
 
 \subsubsection{Step 1 --- Compile Firmware Binary}
-Using
-\begin{lstlisting}[caption={Compile with PlatformIO}]
+Use Commands
+\begin{lstlisting}[language=bash, caption={Compile with PlatformIO}]
 pio run
 # binary at: .pio/build/esp2/firmware.bin
 \end{lstlisting}
 
 \subsubsection{Step 2 --- Upload Binary to ESP32 \#1}
-Using
-\begin{lstlisting}[caption={Upload binary to ESP32 \#1}]
+Use Commands
+\begin{lstlisting}[language=bash, caption={Upload binary to ESP32 \#1}]
 # PlatformIO binary
 curl -F "firmware=@.pio/build/esp2/firmware.bin" \
-  http://192.168.4.1/upload
+     http://192.168.4.1/upload
 # Verify it landed
-curl http://192.168.4.1/status # firmware_loaded: true
+curl http://192.168.4.1/status  # firmware_loaded: true
 \end{lstlisting}
 
 \subsubsection{Step 3 --- Trigger OTA Push}
-Using
-\begin{lstlisting}[caption={Trigger OTA push}]
+Use Commands
+\begin{lstlisting}[language=bash, caption={Trigger OTA push}]
 curl http://192.168.4.1/trigger
 \end{lstlisting}
 
-ESP32 \#1 connects to 192.168.4.2:8080, sends the binary
-with the MD5 header, and reports success. ESP32 \#2 verifies,
-writes, and reboots.
+ESP32~\#1 connects to \texttt{192.168.4.2:8080}, sends the binary with the
+MD5 header, and reports success.
+ESP32~\#2 verifies, writes, and reboots.
 
 \subsubsection{Step 4 --- Verify}
-
-Wait $\approx$5 seconds for ESP32 \#2 to reboot, then:
-
-\begin{lstlisting}[caption={Verify ESP32 \#2 is back online}]
+Wait $\approx$5\,seconds for ESP32~\#2 to reboot, then:
+\begin{lstlisting}[language=bash, caption={Verify ESP32 \#2 is back online}]
 curl http://192.168.4.2:8080/status
 \end{lstlisting}
 
 \subsection{Golden Rule}
 
-Every sketch deployed to ESP32 \#2 must include
-\texttt{handleOTAClient()} and \texttt{otaServer.available()}
-in \texttt{loop()}. If you flash a plain sketch without it, ESP32 \#2
-loses wireless update capability and requires USB to recover.
+Every sketch deployed to ESP32~\#2 \textbf{must} include
+\texttt{handleOTAClient()} and \texttt{otaServer.available()} in
+\texttt{loop()}.
+If you flash a plain sketch without it, ESP32~\#2 loses wireless update
+capability and requires USB to recover.
 See the receiver template for the minimum required structure.
 
-\begin{lstlisting}[caption={Minimum required structure for every ESP32 \#2 firmware}]
+\begin{lstlisting}[language=C++, caption={Minimum required structure for every ESP32 \#2 firmware}]
 #include <WiFi.h>
 #include <Update.h>
 
 WiFiServer otaServer(8080);
-
 // paste handleOTAClient() from esp32_receiver_final.ino
 
 void setup() {
-  connectWiFi(); // connect to ESP32-OTA-Net
+  connectWiFi();     // connect to ESP32-OTA-Net
   otaServer.begin(); // always start OTA server
   // your app setup ...
 }
@@ -331,5 +388,24 @@ void loop() {
 }
 \end{lstlisting}
 
+%---------------------------------------------------------------------
+\section{Conclusion}
+%---------------------------------------------------------------------
+
+ESP-Flasher demonstrates that a fully USB-free firmware deployment chain is
+achievable from an Android phone running Termux.
+Chapter~I establishes a reliable WiFi-to-UART bridge for AVR targets by
+characterising and solving the DTR timing problem inherent in socket-based
+\texttt{avrdude} operation.
+Chapter~II extends the concept to ESP32 targets through a direct-IP HTTP OTA
+scheme that requires no cloud infrastructure or mDNS, operating entirely over
+a self-hosted access-point network.
+The combined system provides a reproducible, command-line-only workflow
+suitable for constrained development environments where USB host access is
+unavailable.
+
+%---------------------------------------------------------------------
+\bibliographystyle{IEEEtran}
+\bibliography{references}
 
 \end{document}
